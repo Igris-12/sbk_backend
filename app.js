@@ -14,7 +14,7 @@ app.use(express.json());
 
 // --- Configuration ---
 // The URL for the Python Flask server.
-const FLASK_SERVER_URL = 'http://127.0.0.1:5000/generate'; // Flask server port
+const FLASK_SERVER_URL = 'https://sbk-flask-7krfl4l3w-manan-s-projects.vercel.app/generate'; // Flask server port
 
 // --- API Endpoint Definition ---
 // This endpoint acts as a proxy for all requests to the Gemini API via Flask.
