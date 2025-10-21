@@ -14,7 +14,7 @@ app.use(express.json());
 
 // --- Configuration ---
 // The URL for the Python Flask server.
-const FLASK_SERVER_URL = 'https://sbk-flask-7krfl4l3w-manan-s-projects.vercel.app/generate'; // Flask server port
+const FLASK_SERVER_URL = 'https://sbk-flask.vercel.app'; // Flask server port
 
 // --- API Endpoint Definition ---
 // This endpoint acts as a proxy for all requests to the Gemini API via Flask.
@@ -58,7 +58,8 @@ app.post('/ask-gemini', async (req, res) => {
 });
 
 // --- Server Start ---
-app.listen(PORT, () => {
-    console.log(`Node.js Express server is running on http://localhost:${PORT}`);
-    console.log('Ready to receive requests from the React frontend.');
-});
+// app.listen(PORT, () => {
+//     console.log(`Node.js Express server is running on http://localhost:${PORT}`);
+//     console.log('Ready to receive requests from the React frontend.');
+// });
+module.exports = app;
