@@ -1,66 +1,85 @@
-// server.js (Node.js Express Proxy Server)
-
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 
-// --- Express App Initialization ---
 const app = express();
-const PORT = 3000; // Node.js server port
+const PORT = process.env.PORT || 3000;
 
-// --- Middleware ---
-app.use(cors());
+// CORS Configuration
+app.use(cors({
+  origin: [
+    'https://sbkfrontend.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  credentials: true
+}));
+
 app.use(express.json());
 
-// --- Configuration ---
-// The URL for the Python Flask server.
-const FLASK_SERVER_URL = 'https://sbk-flask.vercel.app/generate';
- // Flask server port
+const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate';
 
-// --- API Endpoint Definition ---
-// This endpoint acts as a proxy for all requests to the Gemini API via Flask.
+// ✅ ROOT ROUTE - MUST BE FIRST
+app.get('/', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK',
+        message: 'Node.js proxy server is running',
+        timestamp: new Date().toISOString(),
+        endpoints: {
+            gemini: 'POST /ask-gemini',
+            health: 'GET /health'
+        }
+    });
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy' });
+});
+
+// Gemini proxy endpoint
 app.post('/ask-gemini', async (req, res) => {
     try {
         const { query } = req.body;
 
         if (!query) {
-            return res.status(400).json({ error: "The 'query' field is required." });
+            return res.status(400).json({ 
+                error: "Missing 'query' field" 
+            });
         }
 
-        console.log(`[Node.js] Received query from React: "${query}"`);
-        console.log(`[Node.js] Forwarding to Flask server at ${FLASK_SERVER_URL}...`);
+        console.log(`[Node] Query: "${query}"`);
 
-        // Send the query to the Flask server using Axios
         const flaskResponse = await axios.post(FLASK_SERVER_URL, {
             query: query
+        }, {
+            timeout: 30000,
+            headers: { 'Content-Type': 'application/json' }
         });
 
-        console.log('[Node.js] Received response from Flask. Sending back to React.');
-
-        // Flask's response should be { "response": "..." }
         res.status(200).json(flaskResponse.data);
 
     } catch (error) {
-        console.error('[Node.js] Error in /ask-gemini proxy:', error.message);
+        console.error('[Node] Error:', error.message);
         
         if (error.response) {
-            // Error response from Flask (e.g., 400 or 500 from Flask's try-except)
-            res.status(error.response.status).json({
-                error: 'An error occurred with the Python service.',
+            return res.status(error.response.status).json({
+                error: 'Flask API error',
                 details: error.response.data
             });
         } else if (error.request) {
-            // Flask server is not running
-            res.status(503).json({ error: 'The Python service is unavailable. Is the Flask server running on port 5000?' });
+            return res.status(503).json({ 
+                error: 'Flask service unavailable'
+            });
         } else {
-            res.status(500).json({ error: 'An internal server error occurred.' });
+            return res.status(500).json({ 
+                error: 'Internal server error',
+                message: error.message
+            });
         }
     }
 });
 
-// --- Server Start ---
-// app.listen(PORT, () => {
-//     console.log(`Node.js Express server is running on http://localhost:${PORT}`);
-//     console.log('Ready to receive requests from the React frontend.');
-// });
+// Export for Vercel
 module.exports = app;
