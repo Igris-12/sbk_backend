@@ -45,6 +45,6 @@ const userSchema = mongoose.Schema({
 },
     { timestamps: true }
 )
-
+//testing
 const UserModel = mongoose.model("userbiospace",userSchema);
 export default UserModel;
