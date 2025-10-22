@@ -18,7 +18,7 @@ app.use(cors({
 
 app.use(express.json());
 
-const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate';
+const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate' || 'http://localhost:5000';
 
 // ✅ ROOT ROUTE - MUST BE FIRST
 app.get('/', (req, res) => {
@@ -79,6 +79,9 @@ app.post('/ask-gemini', async (req, res) => {
             });
         }
     }
+});
+app.listen(PORT, () => {
+  console.log(`Node.js server listening on http://localhost:${PORT}`);
 });
 
 // Export for Vercel
