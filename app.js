@@ -1,94 +1,3 @@
-// const express = require('express');
-// const axios = require('axios');
-// const cors = require('cors');
-
-// const app = express();
-// const PORT = process.env.PORT || 3000;
-
-// // CORS Configuration
-// app.use(cors({
-//   origin: [
-//     'https://sbkfrontend.vercel.app',
-//     'http://localhost:5173',
-//     'http://localhost:3000'
-//   ],
-//   methods: ['GET', 'POST', 'OPTIONS'],
-//   credentials: true
-// }));
-
-// app.use(express.json());
-
-// const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate' || 'http://localhost:5000';
-
-// // ✅ ROOT ROUTE - MUST BE FIRST
-// app.get('/', (req, res) => {
-//     res.status(200).json({ 
-//         status: 'OK',
-//         message: 'Node.js proxy server is running',
-//         timestamp: new Date().toISOString(),
-//         endpoints: {
-//             gemini: 'POST /ask-gemini',
-//             health: 'GET /health'
-//         }
-//     });
-// });
-
-// // Health check
-// app.get('/health', (req, res) => {
-//     res.status(200).json({ status: 'healthy' });
-// });
-
-// // Gemini proxy endpoint
-// app.post('/ask-gemini', async (req, res) => {
-//     try {
-//         const { query } = req.body;
-
-//         if (!query) {
-//             return res.status(400).json({ 
-//                 error: "Missing 'query' field" 
-//             });
-//         }
-
-//         console.log(`[Node] Query: "${query}"`);
-
-//         const flaskResponse = await axios.post(FLASK_SERVER_URL, {
-//             query: query
-//         }, {
-//             timeout: 30000,
-//             headers: { 'Content-Type': 'application/json' }
-//         });
-
-//         res.status(200).json(flaskResponse.data);
-
-//     } catch (error) {
-//         console.error('[Node] Error:', error.message);
-        
-//         if (error.response) {
-//             return res.status(error.response.status).json({
-//                 error: 'Flask API error',
-//                 details: error.response.data
-//             });
-//         } else if (error.request) {
-//             return res.status(503).json({ 
-//                 error: 'Flask service unavailable'
-//             });
-//         } else {
-//             return res.status(500).json({ 
-//                 error: 'Internal server error',
-//                 message: error.message
-//             });
-//         }
-//     }
-// });
-// //Use Only when working on localHost
-// // app.listen(PORT, () => {
-// //   console.log(`Node.js server listening on http://localhost:${PORT}`);
-// // });
-
-// // Export for Vercel
-// module.exports = app;
-
-
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -104,56 +13,95 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS Configuration - Allow multiple origins
+// CORS Configuration
 app.use(cors({
   origin: [
     'https://sbkfrontend.vercel.app',
     'http://localhost:5173',
-    'http://localhost:3000',
-    '*'
+    'http://localhost:3000'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Middleware
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
-// Flask server URL for Gemini API
-const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate' || 'http://localhost:5000';
+// Flask server URL
+const FLASK_SERVER_URL = process.env.FLASK_URL || 'https://sbk-flask.vercel.app/generate';
+
+// Database connection state (for connection reuse in serverless)
+let isDBConnected = false;
+
+// Initialize database connection with connection reuse
+const initDB = async () => {
+  if (!isDBConnected) {
+    try {
+      await connectDB();
+      isDBConnected = true;
+      console.log('✅ MongoDB connected');
+    } catch (error) {
+      console.error('❌ MongoDB connection error:', error.message);
+      // Don't throw error to prevent function crash
+    }
+  }
+};
 
 // ===== ROOT ROUTE =====
-app.get("/", (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    message: 'Server is running on port ' + PORT,
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      root: 'GET /',
-      health: 'GET /health',
-      gemini: 'POST /ask-gemini',
-      user: '/api/user/*'
-    }
-  });
+app.get("/", async (req, res) => {
+  try {
+    await initDB();
+    res.status(200).json({
+      status: 'OK',
+      message: 'SBK Backend Server is running',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      endpoints: {
+        root: 'GET /',
+        health: 'GET /health',
+        gemini: 'POST /ask-gemini',
+        user: '/api/user/*'
+      }
+    });
+  } catch (error) {
+    console.error('Root route error:', error);
+    res.status(500).json({ 
+      error: 'Server error', 
+      message: error.message 
+    });
+  }
 });
 
 // ===== HEALTH CHECK =====
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    database: 'connected'
-  });
+app.get('/health', async (req, res) => {
+  try {
+    await initDB();
+    res.status(200).json({ 
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      database: isDBConnected ? 'connected' : 'disconnected',
+      flask_url: FLASK_SERVER_URL
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      error: error.message 
+    });
+  }
 });
 
 // ===== GEMINI AI PROXY ENDPOINT =====
 app.post('/ask-gemini', async (req, res) => {
   try {
+    await initDB();
+    
     const { query } = req.body;
 
     if (!query) {
@@ -162,20 +110,22 @@ app.post('/ask-gemini', async (req, res) => {
       });
     }
 
-    console.log(`[Gemini API] Query received: "${query.substring(0, 100)}..."`);
+    console.log(`[Gemini API] Processing query (${query.length} chars)`);
 
     const flaskResponse = await axios.post(FLASK_SERVER_URL, {
       query: query
     }, {
       timeout: 30000,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json'
+      }
     });
 
-    console.log('[Gemini API] Response received successfully');
+    console.log('[Gemini API] ✅ Response received');
     res.status(200).json(flaskResponse.data);
 
   } catch (error) {
-    console.error('[Gemini API] Error:', error.message);
+    console.error('[Gemini API] ❌ Error:', error.message);
     
     if (error.response) {
       // Flask server responded with error
@@ -188,7 +138,14 @@ app.post('/ask-gemini', async (req, res) => {
       // Flask server didn't respond
       return res.status(503).json({ 
         error: 'Flask service unavailable',
-        message: 'Could not connect to Flask server'
+        message: 'Could not connect to Flask server',
+        flask_url: FLASK_SERVER_URL
+      });
+    } else if (error.code === 'ECONNABORTED') {
+      // Timeout
+      return res.status(504).json({
+        error: 'Request timeout',
+        message: 'Flask server took too long to respond'
       });
     } else {
       // Other errors
@@ -201,41 +158,48 @@ app.post('/ask-gemini', async (req, res) => {
 });
 
 // ===== API ROUTES =====
-app.use('/api/user', userRouter);
+// Initialize DB before user routes
+app.use('/api/user', async (req, res, next) => {
+  await initDB();
+  next();
+}, userRouter);
 
 // ===== 404 HANDLER =====
 app.use((req, res) => {
   res.status(404).json({
     error: 'Route not found',
     path: req.originalUrl,
-    method: req.method
+    method: req.method,
+    availableRoutes: ['/', '/health', '/ask-gemini', '/api/user/*']
   });
 });
 
 // ===== ERROR HANDLER =====
 app.use((err, req, res, next) => {
-  console.error('Server Error:', err.stack);
-  res.status(500).json({
+  console.error('❌ Server Error:', err.stack);
+  res.status(err.status || 500).json({
     error: 'Internal server error',
-    message: err.message
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
   });
 });
 
-// ===== START SERVER =====
-// Connect to MongoDB first, then start server
-connectDB().then(() => {
-  // Only start server if not in Vercel serverless environment
-  if (process.env.VERCEL !== '1') {
+// ===== START SERVER (Local Development Only) =====
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
+  connectDB().then(() => {
+    isDBConnected = true;
     app.listen(PORT, () => {
-      console.log(`✅ Server is running on http://localhost:${PORT}`);
-      console.log(`✅ MongoDB connected`);
-      console.log(`✅ Flask server URL: ${FLASK_SERVER_URL}`);
+      console.log('=================================');
+      console.log(`✅ Server running: http://localhost:${PORT}`);
+      console.log(`✅ MongoDB: Connected`);
+      console.log(`✅ Flask URL: ${FLASK_SERVER_URL}`);
+      console.log('=================================');
     });
-  }
-}).catch((error) => {
-  console.error('❌ MongoDB connection failed:', error);
-  process.exit(1);
-});
+  }).catch((error) => {
+    console.error('❌ Startup Error:', error);
+    process.exit(1);
+  });
+}
 
-// Export for Vercel serverless
+// Export for Vercel serverless functions
 export default app;
