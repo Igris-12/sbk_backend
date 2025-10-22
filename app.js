@@ -80,9 +80,10 @@ app.post('/ask-gemini', async (req, res) => {
         }
     }
 });
-app.listen(PORT, () => {
-  console.log(`Node.js server listening on http://localhost:${PORT}`);
-});
+//Use Only when working on localHost
+// app.listen(PORT, () => {
+//   console.log(`Node.js server listening on http://localhost:${PORT}`);
+// });
 
 // Export for Vercel
 module.exports = app;
